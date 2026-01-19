@@ -1,8 +1,12 @@
 package main
 
 import (
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -61,7 +65,60 @@ func main() {
 		c.HTML(http.StatusOK, "admin.html", nil)
 	})
 
-	r.Run(":8080")
+	// 创建一个通道来接收系统中断信号
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// 在一个goroutine中启动HTTP服务器
+	go func() {
+		if err := r.Run(":8080"); err != nil {
+			log.Fatal("Failed to start server:", err)
+		}
+	}()
+
+	log.Println("服务器启动在 :8080 端口，等待中断信号...")
+
+	// 等待中断信号
+	sig := <-sigChan
+	log.Printf("收到终止信号: %v", sig)
+	log.Println("正在保存数据...")
+
+	// 尝试保存临时文件
+	saveTempJSONFiles()
+
+	log.Println("数据保存完成")
+	os.Exit(0)
+}
+
+// 保存临时JSON文件到正式文件
+func saveTempJSONFiles() {
+	// 检查是否存在临时文件
+	tempFile := "data.json.tmp"
+	if _, err := os.Stat(tempFile); os.IsNotExist(err) {
+		log.Printf("临时文件 %s 不存在，跳过保存", tempFile)
+		return
+	}
+
+	// 读取临时文件内容
+	tempData, err := os.ReadFile(tempFile)
+	if err != nil {
+		log.Printf("读取临时文件失败: %v", err)
+		// 如果临时文件读取失败，尝试读取原文件
+		originalData, readErr := os.ReadFile("data.json")
+		if readErr != nil {
+			log.Printf("原文件也读取失败: %v", readErr)
+			return
+		}
+		tempData = originalData
+	}
+
+	// 将内容写入正式文件
+	if err := os.WriteFile("data.json", tempData, 0644); err != nil {
+		log.Printf("写入数据文件失败: %v", err)
+		return
+	}
+
+	log.Println("数据已成功保存到 data.json")
 }
 
 // 获取所有点歌请求
