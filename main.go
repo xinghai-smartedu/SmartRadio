@@ -47,13 +47,6 @@ func main() {
 		api.PUT("/songs/:id/status", updateSongStatus)
 		api.DELETE("/songs/:id", deleteSong)
 
-		// QQ音乐API路由
-		qqmusic := api.Group("/qqmusic")
-		{
-			qqmusic.GET("/search", searchSongsFromQQ)
-			qqmusic.GET("/play/:songmid", getSongURL)
-			qqmusic.POST("/add/:songmid", addSongFromQQ)
-		}
 	}
 
 	// 前端页面路由
@@ -141,12 +134,6 @@ func addSong(c *gin.Context) {
 		return
 	}
 
-	// 如果提供了songmid但没有提供URL，则尝试获取URL
-	if song.URL == "" {
-		// 这里可以扩展逻辑来根据其他信息获取URL
-		// 暂时保持空URL
-	}
-
 	song = store.Create(song)
 	c.JSON(http.StatusOK, song)
 }
@@ -194,79 +181,4 @@ func deleteSong(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Song deleted successfully"})
-}
-
-// 从QQ音乐搜索歌曲
-func searchSongsFromQQ(c *gin.Context) {
-	keyword := c.Query("keyword")
-	if keyword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Keyword is required"})
-		return
-	}
-
-	limitStr := c.Query("limit")
-	limit := 10 // 默认返回10首
-	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			if parsedLimit > 50 { // 限制最大数量
-				limit = 50
-			} else {
-				limit = parsedLimit
-			}
-		}
-	}
-
-	songs, err := GlobalQQMusicAPI.SearchSongs(keyword, limit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"songs": songs})
-}
-
-// 通过QQ音乐ID直接添加歌曲
-func addSongFromQQ(c *gin.Context) {
-	songmid := c.Param("songmid")
-
-	// 获取歌曲详细信息
-	songs, err := GlobalQQMusicAPI.SearchSongs(songmid, 1)
-	if err != nil || len(songs) == 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get song details"})
-		return
-	}
-
-	songDetail := songs[0]
-
-	// 获取歌曲URL
-	url, err := GlobalQQMusicAPI.GetSongURL(songmid)
-	if err != nil {
-		// 即使无法获取URL，也可以添加歌曲，只是URL字段为空
-		url = ""
-	}
-
-	// 创建新的点歌请求，包含URL
-	newSong := SongRequest{
-		Title:     songDetail.Title,
-		Artist:    songDetail.Artist,
-		Requester: "QQMusic",
-		Status:    "pending",
-		URL:       url,
-	}
-
-	createdSong := store.Create(newSong)
-	c.JSON(http.StatusOK, createdSong)
-}
-
-// 获取歌曲播放链接
-func getSongURL(c *gin.Context) {
-	songmid := c.Param("songmid")
-
-	url, err := GlobalQQMusicAPI.GetSongURL(songmid)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"url": url})
 }
