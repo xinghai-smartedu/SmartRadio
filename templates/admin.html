@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员 - 广播站点歌系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .song-card {
+            transition: transform 0.2s;
+        }
+        .song-card:hover {
+            transform: translateY(-2px);
+        }
+        .status-pending { border-left: 4px solid #ffc107; }
+        .status-playing { border-left: 4px solid #28a745; }
+        .status-played { border-left: 4px solid #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="display-4">📢 广播站管理系统</h1>
+            <p class="lead">管理员控制台 - 管理点歌请求</p>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">🎵 歌曲管理</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-light me-2" onclick="loadSongs()">刷新</button>
+                            <a href="/" class="btn btn-sm btn-outline-light">返回前台</a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card text-center bg-warning text-dark">
+                                    <div class="card-body">
+                                        <h4 id="pendingCount">0</h4>
+                                        <p class="card-text">待处理</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center bg-success text-white">
+                                    <div class="card-body">
+                                        <h4 id="playingCount">0</h4>
+                                        <p class="card-text">播放中</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center bg-secondary text-white">
+                                    <div class="card-body">
+                                        <h4 id="playedCount">0</h4>
+                                        <p class="card-text">已播放</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center bg-primary text-white">
+                                    <div class="card-body">
+                                        <h4 id="totalCount">0</h4>
+                                        <p class="card-text">总计</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5>全部歌曲列表</h5>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary btn-sm active" data-status="">全部</button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" data-status="pending">待处理</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" data-status="playing">播放中</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-status="played">已播放</button>
+                            </div>
+                        </div>
+
+                        <div id="songsList">
+                            <!-- 歌曲列表将在这里动态加载 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态修改模态框 -->
+    <div class="modal fade" id="statusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改歌曲状态</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="statusForm">
+                        <input type="hidden" id="songId" name="id">
+                        <div class="mb-3">
+                            <label for="statusSelect" class="form-label">选择新状态</label>
+                            <select class="form-select" id="statusSelect" name="status" required>
+                                <option value="pending">待处理</option>
+                                <option value="playing">播放中</option>
+                                <option value="played">已播放</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="updateSongStatus()">保存更改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedSongId = null;
+
+        // 加载歌曲列表
+        async function loadSongs(status = '') {
+            try {
+                let url = '/api/songs';
+                if (status) {
+                    url += `?status=${status}`;
+                }
+                
+                const response = await fetch(url);
+                const songs = await response.json();
+                
+                const songsList = document.getElementById('songsList');
+                songsList.innerHTML = '';
+                
+                if (songs.length === 0) {
+                    songsList.innerHTML = '<div class="alert alert-info text-center">没有找到歌曲</div>';
+                    updateStats([]);
+                    return;
+                }
+                
+                songs.forEach(song => {
+                    songsList.appendChild(createSongCard(song));
+                });
+                
+                updateStats(songs);
+            } catch (error) {
+                console.error('加载歌曲失败:', error);
+                document.getElementById('songsList').innerHTML = '<div class="alert alert-danger">加载歌曲失败</div>';
+            }
+        }
+        
+        // 创建歌曲卡片
+        function createSongCard(song) {
+            const card = document.createElement('div');
+            card.className = `card song-card mb-3 ${getStatusClass(song.status)}`;
+            
+            card.innerHTML = `
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="card-title">${song.title}</h6>
+                            <p class="card-text mb-1"><strong>歌手:</strong> ${song.artist}</p>
+                            <p class="card-text mb-0"><strong>点歌人:</strong> ${song.requester}</p>
+                            <small class="text-muted">时间: ${new Date(song.created_at).toLocaleString()}</small>
+                            ${song.url ? `<div class="mt-2"><a href="${song.url}" target="_blank" class="btn btn-sm btn-success">🎵 播放链接</a></div>` : ''}
+                        </div>
+                        <div>
+                            <span class="badge ${getStatusBadgeClass(song.status)} mb-2">${getStatusText(song.status)}</span>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="openStatusModal(${song.id})">修改状态</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteSong(${song.id})">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        // 获取状态文本
+        function getStatusText(status) {
+            switch(status) {
+                case 'pending': return '待处理';
+                case 'playing': return '播放中';
+                case 'played': return '已播放';
+                default: return status;
+            }
+        }
+        
+        // 获取状态类名
+        function getStatusClass(status) {
+            switch(status) {
+                case 'pending': return 'status-pending';
+                case 'playing': return 'status-playing';
+                case 'played': return 'status-played';
+                default: return '';
+            }
+        }
+        
+        // 获取状态徽章类名
+        function getStatusBadgeClass(status) {
+            switch(status) {
+                case 'pending': return 'bg-warning text-dark';
+                case 'playing': return 'bg-success';
+                case 'played': return 'bg-secondary';
+                default: return 'bg-light text-dark';
+            }
+        }
+        
+        // 更新统计数据
+        function updateStats(songs) {
+            const pendingCount = songs.filter(song => song.status === 'pending').length;
+            const playingCount = songs.filter(song => song.status === 'playing').length;
+            const playedCount = songs.filter(song => song.status === 'played').length;
+            
+            document.getElementById('pendingCount').textContent = pendingCount;
+            document.getElementById('playingCount').textContent = playingCount;
+            document.getElementById('playedCount').textContent = playedCount;
+            document.getElementById('totalCount').textContent = songs.length;
+        }
+        
+        // 打开状态修改模态框
+        function openStatusModal(songId) {
+            selectedSongId = songId;
+            document.getElementById('songId').value = songId;
+            
+            // 根据当前状态设置下拉选项的默认值
+            const songs = Array.from(document.querySelectorAll('.song-card'));
+            const songElement = Array.from(songs).find(card => 
+                card.querySelector(`button[onclick="openStatusModal(${songId})"]`)
+            );
+            
+            if (songElement) {
+                const statusText = songElement.querySelector('.badge').textContent;
+                let statusValue = '';
+                switch(statusText) {
+                    case '待处理': statusValue = 'pending'; break;
+                    case '播放中': statusValue = 'playing'; break;
+                    case '已播放': statusValue = 'played'; break;
+                }
+                document.getElementById('statusSelect').value = statusValue;
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+            modal.show();
+        }
+        
+        // 更新歌曲状态
+        async function updateSongStatus() {
+            const newStatus = document.getElementById('statusSelect').value;
+            
+            try {
+                const response = await fetch(`/api/songs/${selectedSongId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                
+                if (response.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('statusModal')).hide();
+                    loadSongs(); // 重新加载歌曲列表
+                    alert('状态更新成功！');
+                } else {
+                    const error = await response.json();
+                    alert('更新失败: ' + error.error);
+                }
+            } catch (error) {
+                alert('网络错误，请重试');
+            }
+        }
+        
+        // 删除歌曲
+        async function deleteSong(songId) {
+            if (!confirm('确定要删除这首歌吗？此操作不可撤销。')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/songs/${songId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadSongs(); // 重新加载歌曲列表
+                    alert('删除成功！');
+                } else {
+                    const error = await response.json();
+                    alert('删除失败: ' + error.error);
+                }
+            } catch (error) {
+                alert('网络错误，请重试');
+            }
+        }
+        
+        // 绑定状态筛选按钮事件
+        document.querySelectorAll('[data-status]').forEach(button => {
+            button.addEventListener('click', function() {
+                document.querySelectorAll('[data-status]').forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                const status = this.getAttribute('data-status');
+                loadSongs(status);
+            });
+        });
+        
+        // 页面加载时获取歌曲列表
+        loadSongs();
+        
+        // 每30秒自动刷新一次数据
+        setInterval(() => {
+            const activeStatus = document.querySelector('[data-status].active')?.getAttribute('data-status') || '';
+            loadSongs(activeStatus);
+        }, 30000);
+    </script>
+</body>
+</html>

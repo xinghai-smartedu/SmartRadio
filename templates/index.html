@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>广播站点歌系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .song-card {
+            transition: transform 0.2s;
+        }
+        .song-card:hover {
+            transform: translateY(-2px);
+        }
+        .status-pending { border-left: 4px solid #ffc107; }
+        .status-playing { border-left: 4px solid #28a745; }
+        .status-played { border-left: 4px solid #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="display-4">🎵 广播站点歌系统</h1>
+            <p class="lead">欢迎来到我们的音乐世界，点播你喜欢的歌曲吧！</p>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">📝 点歌表单</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="songForm">
+                            <div class="mb-3">
+                                <label for="title" class="form-label">歌曲名称</label>
+                                <input type="text" class="form-control" id="title" name="title" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="artist" class="form-label">歌手</label>
+                                <input type="text" class="form-control" id="artist" name="artist" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="requester" class="form-label">点歌人</label>
+                                <input type="text" class="form-control" id="requester" name="requester" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">提交点歌</button>
+                        </form>
+                        
+                        <hr>
+                        
+                        <div class="mt-3">
+                            <h6 class="mb-3">🎵 从QQ音乐搜索</h6>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="searchInput" placeholder="输入歌曲名或歌手...">
+                                <button class="btn btn-outline-secondary" type="button" id="searchBtn">搜索</button>
+                            </div>
+                            
+                            <div id="searchResults" class="mt-3" style="max-height: 300px; overflow-y: auto;">
+                                <!-- 搜索结果将在这里显示 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">📊 歌曲统计</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-3">
+                                    <h4 id="pendingCount">0</h4>
+                                    <small class="text-muted">待播放</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-3">
+                                    <h4 id="playingCount">0</h4>
+                                    <small class="text-muted">播放中</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-3">
+                                    <h4 id="playedCount">0</h4>
+                                    <small class="text-muted">已播放</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">📋 歌曲列表</h5>
+            </div>
+            <div class="card-body">
+                <div id="songsList">
+                    <!-- 歌曲列表将在这里动态加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 加载歌曲列表
+        async function loadSongs() {
+            try {
+                const response = await fetch('/api/songs');
+                const songs = await response.json();
+                
+                const songsList = document.getElementById('songsList');
+                songsList.innerHTML = '';
+                
+                // 按状态分组显示歌曲
+                const pendingSongs = songs.filter(song => song.status === 'pending');
+                const playingSongs = songs.filter(song => song.status === 'playing');
+                const playedSongs = songs.filter(song => song.status === 'played');
+                
+                // 显示待播放歌曲
+                if (pendingSongs.length > 0) {
+                    songsList.appendChild(createSectionHeader('待播放', '#ffc107'));
+                    const songsContainer = createSongsGrid();
+                    pendingSongs.forEach(song => {
+                        songsContainer.appendChild(createSongCard(song));
+                    });
+                    songsList.appendChild(songsContainer);
+                }
+                
+                // 显示播放中歌曲
+                if (playingSongs.length > 0) {
+                    songsList.appendChild(createSectionHeader('播放中', '#28a745'));
+                    const songsContainer = createSongsGrid();
+                    playingSongs.forEach(song => {
+                        songsContainer.appendChild(createSongCard(song));
+                    });
+                    songsList.appendChild(songsContainer);
+                }
+                
+                // 显示已播放歌曲
+                if (playedSongs.length > 0) {
+                    songsList.appendChild(createSectionHeader('已播放', '#6c757d'));
+                    const songsContainer = createSongsGrid();
+                    playedSongs.forEach(song => {
+                        songsContainer.appendChild(createSongCard(song));
+                    });
+                    songsList.appendChild(songsContainer);
+                }
+                
+                updateStats(songs);
+            } catch (error) {
+                console.error('加载歌曲失败:', error);
+            }
+        }
+        
+        // 创建分组标题
+        function createSectionHeader(title, color) {
+            const header = document.createElement('h5');
+            header.className = 'mt-4 mb-3';
+            header.style.borderLeft = `4px solid ${color}`;
+            header.style.paddingLeft = '10px';
+            header.textContent = title;
+            return header;
+        }
+        
+        // 创建歌曲网格容器
+        function createSongsGrid() {
+            const container = document.createElement('div');
+            container.className = 'row';
+            return container;
+        }
+        
+        // 创建歌曲卡片
+        function createSongCard(song) {
+            const col = document.createElement('div');
+            col.className = 'col-md-4 mb-3';
+            
+            const card = document.createElement('div');
+            card.className = `card h-100 song-card ${getStatusClass(song.status)}`;
+            card.dataset.id = song.ID;
+            
+            card.innerHTML = `
+                <div class="card-body">
+                    <h5 class="card-title">${song.title}</h5>
+                    <p class="card-text">歌手：${song.artist}</p>
+                    <div class="d-flex flex-column align-items-end">
+                        <span class="badge ${getStatusBadgeClass(song.status)}">${getStatusText(song.status)}</span>
+                        ${song.URL ? `<button class="btn btn-sm btn-success mt-2" onclick="playSongByURL('${song.URL}')">🎵 播放</button>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            col.appendChild(card);
+            return col;
+        }
+        
+        // 获取状态文本
+        function getStatusText(status) {
+            switch(status) {
+                case 'pending': return '待播放';
+                case 'playing': return '播放中';
+                case 'played': return '已播放';
+                default: return status;
+            }
+        }
+        
+        // 获取状态类名
+        function getStatusClass(status) {
+            switch(status) {
+                case 'pending': return 'status-pending';
+                case 'playing': return 'status-playing';
+                case 'played': return 'status-played';
+                default: return '';
+            }
+        }
+        
+        // 获取状态徽章类名
+        function getStatusBadgeClass(status) {
+            switch(status) {
+                case 'pending': return 'bg-warning text-dark';
+                case 'playing': return 'bg-success';
+                case 'played': return 'bg-secondary';
+                default: return 'bg-light text-dark';
+            }
+        }
+
+        // 播放歌曲通过URL
+        window.playSongByURL = function(url) {
+            window.open(url, '_blank', 'width=400,height=300');
+        };
+        
+        // 更新统计数据
+        function updateStats(songs) {
+            const pendingCount = songs.filter(song => song.status === 'pending').length;
+            const playingCount = songs.filter(song => song.status === 'playing').length;
+            const playedCount = songs.filter(song => song.status === 'played').length;
+            
+            document.getElementById('pendingCount').textContent = pendingCount;
+            document.getElementById('playingCount').textContent = playingCount;
+            document.getElementById('playedCount').textContent = playedCount;
+        }
+        
+        // 提交点歌表单
+        document.getElementById('songForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const songData = {
+                title: formData.get('title'),
+                artist: formData.get('artist'),
+                requester: formData.get('requester')
+            };
+            
+            try {
+                const response = await fetch('/api/songs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(songData)
+                });
+                
+                if (response.ok) {
+                    e.target.reset();
+                    loadSongs(); // 重新加载歌曲列表
+                    alert('点歌成功！');
+                } else {
+                    const error = await response.json();
+                    alert('点歌失败: ' + error.error);
+                }
+            } catch (error) {
+                alert('网络错误，请重试');
+            }
+        });
+        
+        // 搜索QQ音乐歌曲
+        document.getElementById('searchBtn').addEventListener('click', async () => {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (!keyword) {
+                alert('请输入搜索关键词');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/qqmusic/search?keyword=${encodeURIComponent(keyword)}&limit=10`);
+                const data = await response.json();
+                
+                const resultsDiv = document.getElementById('searchResults');
+                if (data.songs && data.songs.length > 0) {
+                    resultsDiv.innerHTML = '<div class="list-group">';
+                    
+                    data.songs.forEach(song => {
+                        resultsDiv.innerHTML += `
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">${song.title}</h6>
+                                        <p class="mb-1 text-muted">${song.artist}</p>
+                                        <small>${song.album || ''}</small>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary me-2" onclick="useSong('${song.title}', '${song.artist}')">使用此歌</button>
+                                        <button class="btn btn-sm btn-outline-success me-2" onclick="playSong('${song.id}')">试听</button>
+                                        <button class="btn btn-sm btn-success" onclick="addSongFromQQ('${song.id}', '${song.title}', '${song.artist}')">添加并播放</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    resultsDiv.innerHTML += '</div>';
+                } else {
+                    resultsDiv.innerHTML = '<p class="text-muted">未找到相关歌曲</p>';
+                }
+            } catch (error) {
+                console.error('搜索失败:', error);
+                alert('搜索失败，请重试');
+            }
+        });
+
+        // 使用搜索到的歌曲填充表单
+        window.useSong = function(title, artist) {
+            document.getElementById('title').value = title;
+            document.getElementById('artist').value = artist;
+            
+            // 滚动到表单顶部方便填写
+            document.getElementById('songForm').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        // 播放歌曲（打开播放页面）
+        window.playSong = function(songmid) {
+            window.open(`/api/qqmusic/play/${songmid}`, '_blank');
+        };
+        
+        // 从QQ音乐直接添加歌曲
+        window.addSongFromQQ = async function(songmid, title, artist) {
+            try {
+                const response = await fetch(`/api/qqmusic/add/${songmid}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    loadSongs(); // 重新加载歌曲列表
+                    alert(`已成功添加歌曲：${title} - ${artist}`);
+                } else {
+                    const error = await response.json();
+                    alert('添加失败: ' + error.error);
+                }
+            } catch (error) {
+                alert('网络错误，请重试');
+            }
+        };
+
+        // 监听回车键搜索
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('searchBtn').click();
+            }
+        });
+
+        // 页面加载时获取歌曲列表
+        loadSongs();
+        
+        // 每30秒自动刷新一次数据
+        setInterval(loadSongs, 30000);
+    </script>
+</body>
+</html>
